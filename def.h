@@ -19,6 +19,8 @@
 #define REPORT_MESSAGE_SIZE 128
 #define SLAVE_GROUP "slave_group"
 
-#define MAX_BASE_TIME 10
+#define MAX_BASE_TIME 5
+#define MAX_CRUISE_TIME 10
+#define MAX_MISSION_TIME 5
 
 #endif

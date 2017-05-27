@@ -16,6 +16,7 @@ enum Position {
 };
 
 struct State {
+    int id;
     enum Section section;
     enum Position position;
     int canal;

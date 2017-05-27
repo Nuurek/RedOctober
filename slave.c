@@ -35,6 +35,7 @@ void initializeLocalStates() {
 	int myTId = pvm_mytid();
 	for (i = 0; i < instance.slavesNumber; i++) {
 		localState = localStates[i];
+		localState.id = i;
 		localState.section = LOCAL;
 		localState.position = BASE;
 		localState.canal = -1;
@@ -48,13 +49,15 @@ void initializeLocalStates() {
 }
 
 void localSection() {
-	unsigned int period = rand() % MAX_BASE_TIME + 1;
+	unsigned int period;
 	switch (state.position) {
 		case BASE:
+			period = rand() % MAX_BASE_TIME + 1;
 			reportToMaster("Replenishing stocks in the BASE for %d seconds", period);
 			break;
 
 		case MISSION:
+			period = rand() % MAX_MISSION_TIME + 1;
 			reportToMaster("Carrying out the MISSION for %d seconds", period);
 			break;
 	}
@@ -64,23 +67,26 @@ void localSection() {
 }
 
 void requestSection() {
+	state.canal = rand() % instance.canalsNumber;
+
 	state.section = CRITICAL;
 }
 
 void criticalSection() {
-	unsigned int period = rand() % MAX_BASE_TIME + 1;
+	unsigned int period = rand() % MAX_CRUISE_TIME + 1;
 	switch (state.position) {
 		case BASE:
-			reportToMaster("Starting cruise from BASE to MISSION for %d seconds", period);
+			reportToMaster("Starting cruise from BASE to MISSION through canal %d for %d seconds", state.canal, period);
 			state.position = MISSION;
 			break;
 
 		case MISSION:
-			reportToMaster("Starting cruise from MISSION to BASE for %d seconds", period);
+			reportToMaster("Starting cruise from MISSION to BASE through canal %d for %d seconds", state.canal, period);
 			state.position = BASE;
 			break;
 	}
 	sleep(period);
+
 	state.section = LOCAL;
 }
 
@@ -93,6 +99,10 @@ main(int argc, char const *args[])
 
 	initializeLocalStates();
 	reportToMaster("Initialized");
+
+	pvm_joingroup(SLAVE_GROUP);
+	pvm_barrier(SLAVE_GROUP, instance.slavesNumber);
+	reportToMaster("Group created");
 
 	while (true) {
 		switch (state.section) {
