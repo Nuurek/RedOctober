@@ -62,6 +62,12 @@ struct timeval timeDifference(struct timeval& start, struct timeval& stop) {
     return result;
 }
 
+int receiveStateMessage() {
+	State state;
+	unpackState(state);
+	localStates[state.id] = state;
+}
+
 void sleepAndResponse(unsigned int secondsToSleep) {
 	struct timeval period;
 	period.tv_sec = secondsToSleep;
@@ -69,13 +75,19 @@ void sleepAndResponse(unsigned int secondsToSleep) {
 
 	struct timeval  start, now, difference;
 	gettimeofday(&start, NULL);
+	int received = 0;
 	while(pvm_trecv(-1, STATE_TAG, &period)) {
+		receiveStateMessage();
+		++received;
+
 		gettimeofday (&now, NULL);
 		// period -= (now - start)
 		difference = timeDifference(start, now);
 		period = timeDifference(difference, period);
 		start = now;
 	}
+
+	reportToMaster("Received %d while sleeping", received);
 }
 
 void localSection() {
@@ -96,8 +108,17 @@ void localSection() {
 	state.section = REQUEST;
 }
 
+void broadcastStateMessage() {
+	pvm_initsend(PvmDataDefault);
+	packState(state);
+	pvm_bcast(SLAVE_GROUP, STATE_TAG);
+}
+
 void requestSection() {
 	state.canal = rand() % instance.canalsNumber;
+
+	broadcastStateMessage();
+	reportToMaster("Broadcasted state message");
 
 	state.section = CRITICAL;
 }

@@ -18,7 +18,7 @@ void packState(State& state) {
 }
 
 void unpackState(State& state) {
-    pvm_pkbyte((char*)&state, sizeof(state), 1);
+    pvm_upkbyte((char*)&state, sizeof(state), 1);
 }
 
 void seedRandomEngine() {
