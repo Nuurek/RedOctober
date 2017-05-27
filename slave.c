@@ -48,6 +48,36 @@ void initializeLocalStates() {
 	}
 }
 
+struct timeval timeDifference(struct timeval& start, struct timeval& stop) {
+	struct timeval result;
+
+	if ((stop.tv_usec - start.tv_usec) < 0) {
+        result.tv_sec = stop.tv_sec - start.tv_sec - 1;
+        result.tv_usec = stop.tv_usec - start.tv_usec + 1000000;
+    } else {
+        result.tv_sec = stop.tv_sec - start.tv_sec;
+        result.tv_usec = stop.tv_usec - start.tv_usec;
+    }
+
+    return result;
+}
+
+void sleepAndResponse(unsigned int secondsToSleep) {
+	struct timeval period;
+	period.tv_sec = secondsToSleep;
+	period.tv_usec = 0;
+
+	struct timeval  start, now, difference;
+	gettimeofday(&start, NULL);
+	while(pvm_trecv(-1, STATE_TAG, &period)) {
+		gettimeofday (&now, NULL);
+		// period -= (now - start)
+		difference = timeDifference(start, now);
+		period = timeDifference(difference, period);
+		start = now;
+	}
+}
+
 void localSection() {
 	unsigned int period;
 	switch (state.position) {
@@ -61,7 +91,7 @@ void localSection() {
 			reportToMaster("Carrying out the MISSION for %d seconds", period);
 			break;
 	}
-	sleep(period);
+	sleepAndResponse(period);
 
 	state.section = REQUEST;
 }
@@ -85,7 +115,7 @@ void criticalSection() {
 			state.position = BASE;
 			break;
 	}
-	sleep(period);
+	sleepAndResponse(period);
 
 	state.section = LOCAL;
 }
