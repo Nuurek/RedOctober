@@ -26,6 +26,7 @@
 
 #define INITIAL_DATA_TAG 0
 #define REPORT_TAG 1
+#define EXIT_TAG 2
 #define REPORT_MESSAGE_SIZE 128
 #define SLAVE_GROUP "slave_group"
 

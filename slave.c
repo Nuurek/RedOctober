@@ -1,5 +1,6 @@
 #include <stdarg.h>
 #include <string.h>
+#include <unistd.h>
 #include "instance.h"
 #include "state.h"
 #include "common.h"
@@ -9,6 +10,7 @@ Instance instance;
 int myId = -1;
 State localStates[MAX_SLAVES_NUMBER];
 State& state = localStates[0];
+
 
 void reportToMaster(const char* message, ...) {
 	va_list argp;
@@ -56,5 +58,9 @@ main(int argc, char const *args[])
 
 	reportToMaster("Initiated.");
 
-	pvm_exit();
+	while (true) {
+		sleep(2);
+		++state.timestamp;
+		reportToMaster("Dummy message");
+	}
 }

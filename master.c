@@ -1,7 +1,15 @@
+#include <signal.h>
 #include "time.h"
 #include "instance.h"
 #include "common.h"
 
+
+Instance instance;
+volatile bool keepRunning = true;
+
+void interuptHandler(int dummy) {
+	keepRunning = false;
+}
 
 void seedRandomEngine() {
 	int seed;
@@ -56,7 +64,9 @@ void spawnSlaves(Instance& instance) {
 
 	if (numberOfSpawned != instance.slavesNumber) {
 		printf("Not enough slaves spawned! Only %d spawned\n", numberOfSpawned);
+		printf("Before exit\n");
 		pvm_exit();
+		printf("After exit\n");
 		exit(EXIT_FAILURE);
 	} else {
 		printf("Spawned %d slaves\n", numberOfSpawned);
@@ -71,16 +81,24 @@ void initializeSlaves(Instance& instance) {
 
 void collectReportMessage() {
 	char buffer[REPORT_MESSAGE_SIZE];
-	while(true) {
+	while(keepRunning) {
 		pvm_recv(-1, REPORT_TAG);
 		pvm_upkstr(buffer);
 		printf("%s\n", buffer);
 	}
 }
 
-Instance instance;
+void killSlavesAndExit() {
+	int i;
+	for (i = 0; i < instance.slavesNumber; i++) {
+		pvm_kill(instance.slaveTIds[i]);
+	}
+
+	pvm_exit();
+}
 
 int main(int argc, const char *args[]) {
+	signal(SIGINT, interuptHandler);
 	seedRandomEngine();
 
 	instance.slavesNumber = getSlavesNumber(argc, args);
@@ -94,5 +112,5 @@ int main(int argc, const char *args[]) {
 
 	collectReportMessage();
 
-	pvm_exit();
+	killSlavesAndExit();
 }
