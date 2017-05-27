@@ -63,7 +63,7 @@ void spawnSlaves(Instance& instance) {
 	}
 }
 
-void initSlaves(Instance& instance) {
+void initializeSlaves(Instance& instance) {
 	pvm_initsend(PvmDataDefault);
 	packInstance(instance);
 	pvm_mcast(instance.slaveTIds, instance.slavesNumber, INITIAL_DATA_TAG);
@@ -90,7 +90,7 @@ int main(int argc, const char *args[]) {
 	instance.masterTId = pvm_mytid();
 
 	spawnSlaves(instance);
-	initSlaves(instance);
+	initializeSlaves(instance);
 
 	collectReportMessage();
 

@@ -10,7 +10,6 @@ struct Instance {
     int canalsNumber;
     int canalSizes[MAX_CANALS_NUMBER];
 };
-
 typedef struct Instance Instance;
 
 #endif
