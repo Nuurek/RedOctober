@@ -32,35 +32,82 @@ void reportToMaster(const char* message, ...) {
 void initializeLocalStates() {
 	int i;
 	State& localState = localStates[0];
+	int myTId = pvm_mytid();
 	for (i = 0; i < instance.slavesNumber; i++) {
 		localState = localStates[i];
 		localState.section = LOCAL;
 		localState.position = BASE;
 		localState.canal = -1;
 		localState.timestamp = 0;
-	}
-}
 
-main(int argc, char const *args[])
-{
-	int myTId = pvm_mytid();
-
-	pvm_recv(-1, INITIAL_DATA_TAG);
-	unpackInstance(instance);
-
-	int i = 0;
-	for (i = 0; i < instance.slavesNumber; i++) {
 		if (instance.slaveTIds[i] == myTId) {
 			myId = i;
 			state = localStates[myId];
 		}
 	}
+}
 
-	reportToMaster("Initiated.");
+void localSection() {
+	unsigned int period = rand() % MAX_BASE_TIME + 1;
+	switch (state.position) {
+		case BASE:
+			reportToMaster("Replenishing stocks in the BASE for %d seconds", period);
+			break;
+
+		case MISSION:
+			reportToMaster("Carrying out the MISSION for %d seconds", period);
+			break;
+	}
+	sleep(period);
+
+	state.section = REQUEST;
+}
+
+void requestSection() {
+	state.section = CRITICAL;
+}
+
+void criticalSection() {
+	unsigned int period = rand() % MAX_BASE_TIME + 1;
+	switch (state.position) {
+		case BASE:
+			reportToMaster("Starting cruise from BASE to MISSION for %d seconds", period);
+			state.position = MISSION;
+			break;
+
+		case MISSION:
+			reportToMaster("Starting cruise from MISSION to BASE for %d seconds", period);
+			state.position = BASE;
+			break;
+	}
+	sleep(period);
+	state.section = LOCAL;
+}
+
+main(int argc, char const *args[])
+{
+	srand(pvm_mytid());
+
+	pvm_recv(-1, INITIAL_DATA_TAG);
+	unpackInstance(instance);
+
+	initializeLocalStates();
+	reportToMaster("Initialized");
 
 	while (true) {
-		sleep(2);
+		switch (state.section) {
+			case REQUEST:
+				requestSection();
+				break;
+
+			case CRITICAL:
+				criticalSection();
+				break;
+
+			case LOCAL:
+				localSection();
+				break;
+		}
 		++state.timestamp;
-		reportToMaster("Dummy message");
 	}
 }

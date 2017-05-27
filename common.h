@@ -1,3 +1,4 @@
+#include <time.h>
 #include "instance.h"
 
 #ifndef COMMON_H
@@ -11,4 +12,10 @@ void unpackInstance(Instance &instance) {
     pvm_upkbyte((char*)&instance, sizeof(instance), 1);
 }
 
+void seedRandomEngine() {
+	int seed;
+	time_t now;
+	seed = time(&now);
+	srand(seed);
+}
 #endif

@@ -1,5 +1,4 @@
 #include <signal.h>
-#include "time.h"
 #include "instance.h"
 #include "common.h"
 
@@ -8,14 +7,13 @@ Instance instance;
 volatile bool keepRunning = true;
 
 void interuptHandler(int dummy) {
+	/*
+		It wasn't possible to implement PVM exit and slaves killing here.
+		Errors encountered:
+			pvm_exit(): Not implemented
+			pvm_kill(): Not implemented
+	*/
 	keepRunning = false;
-}
-
-void seedRandomEngine() {
-	int seed;
-	time_t now;
-	seed = time(&now);
-	srand(seed);
 }
 
 int getSlavesNumber(int argc, const char *args[]) {
@@ -99,13 +97,13 @@ void killSlavesAndExit() {
 
 int main(int argc, const char *args[]) {
 	signal(SIGINT, interuptHandler);
-	seedRandomEngine();
 
 	instance.slavesNumber = getSlavesNumber(argc, args);
 	instance.canalsNumber = getCanalsNumber(argc, args);
 	setCanalSizes(argc, args, instance);
 
 	instance.masterTId = pvm_mytid();
+	srand(instance.masterTId);
 
 	spawnSlaves(instance);
 	initializeSlaves(instance);
