@@ -62,10 +62,44 @@ struct timeval timeDifference(struct timeval& start, struct timeval& stop) {
     return result;
 }
 
-int receiveStateMessage() {
-	State state;
-	unpackState(state);
-	localStates[state.id] = state;
+void inline incrementTimeStamp() {
+	++(state.timestamp);
+}
+
+void inline updateTimeStamp(long timestamp) {
+	if (timestamp > state.timestamp) {
+		state.timestamp = timestamp + 1;
+	} else {
+		incrementTimeStamp();
+	}
+}
+
+int receiveMessage() {
+	State slaveState;
+	unpackState(slaveState);
+
+	updateTimeStamp(slaveState.timestamp);
+
+	localStates[slaveState.id] = slaveState;
+	return slaveState.id;
+}
+
+void prepareToSendState() {
+	incrementTimeStamp();
+	pvm_initsend(PvmDataDefault);
+	packState(state);
+}
+
+void sendStateMessage(int slaveId) {
+	prepareToSendState();
+
+	pvm_send(slaveId, STATE_TAG);
+}
+
+void receiveRequestAndResponse() {
+	int requestSlaveId = receiveMessage();
+	int tId = instance.slaveTIds[requestSlaveId];
+	sendStateMessage(tId);
 }
 
 void sleepAndResponse(unsigned int secondsToSleep) {
@@ -75,10 +109,9 @@ void sleepAndResponse(unsigned int secondsToSleep) {
 
 	struct timeval  start, now, difference;
 	gettimeofday(&start, NULL);
-	int received = 0;
-	while(pvm_trecv(-1, STATE_TAG, &period)) {
-		receiveStateMessage();
-		++received;
+	int requestSlaveId;
+	while(pvm_trecv(-1, REQUEST_TAG, &period)) {
+		receiveRequestAndResponse();
 
 		gettimeofday (&now, NULL);
 		// period -= (now - start)
@@ -86,8 +119,6 @@ void sleepAndResponse(unsigned int secondsToSleep) {
 		period = timeDifference(difference, period);
 		start = now;
 	}
-
-	reportToMaster("Received %d while sleeping", received);
 }
 
 void localSection() {
@@ -109,16 +140,35 @@ void localSection() {
 }
 
 void broadcastStateMessage() {
-	pvm_initsend(PvmDataDefault);
-	packState(state);
-	pvm_bcast(SLAVE_GROUP, STATE_TAG);
+	prepareToSendState();
+
+	pvm_bcast(SLAVE_GROUP, REQUEST_TAG);
 }
 
 void requestSection() {
 	state.canal = rand() % instance.canalsNumber;
 
+	long requestTimestamp = state.timestamp;
 	broadcastStateMessage();
-	reportToMaster("Broadcasted state message");
+	reportToMaster("Broadcasted request message");
+
+	int requestResponses = 0;
+	while (requestResponses < instance.slavesNumber - 1) {
+		int bufferId = pvm_recv(-1, -1);
+		int tag;
+		pvm_bufinfo(bufferId, NULL, &tag, NULL);
+		switch (tag) {
+			case REQUEST_TAG:
+				receiveRequestAndResponse();
+				reportToMaster("Received request");
+				break;
+			case STATE_TAG:
+				receiveMessage();
+				++requestResponses;
+				reportToMaster("Received response to request no. %d", requestResponses);
+				break;
+		}
+	}
 
 	state.section = CRITICAL;
 }

@@ -17,6 +17,7 @@
 #define REPORT_TAG 1
 #define EXIT_TAG 2
 #define STATE_TAG 3
+#define REQUEST_TAG 4
 #define REPORT_MESSAGE_SIZE 128
 #define SLAVE_GROUP "slave_group"
 
