@@ -31,10 +31,9 @@ void reportToMaster(const char* message, ...) {
 
 void initializeLocalStates() {
 	int i;
-	State& localState = localStates[0];
 	int myTId = pvm_mytid();
 	for (i = 0; i < instance.slavesNumber; i++) {
-		localState = localStates[i];
+		State& localState = localStates[i];
 		localState.id = i;
 		localState.section = LOCAL;
 		localState.position = BASE;
@@ -45,6 +44,7 @@ void initializeLocalStates() {
 		if (instance.slaveTIds[i] == myTId) {
 			myId = i;
 			state = localStates[myId];
+			reportToMaster("My Id: %d, state.id: %d", myId , state.id);
 		}
 	}
 }
@@ -162,7 +162,7 @@ bool requestCondition() {
 			reportToMaster("Not gathered fresh states");
 			return false;
 		}
-		if (otherState.canal == state.canal && otherState.requestTimestamp <= state.requestTimestamp) {
+		if (otherState.canal == state.canal && otherState.requestTimestamp <= state.requestTimestamp && otherState.id < state.id) {
 			reportToMaster("Another request from %d with %d", i, otherState.requestTimestamp);
 			++sameCanalRequests;
 		}
