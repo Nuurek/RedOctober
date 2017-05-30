@@ -9,7 +9,6 @@
 Instance instance;
 int myId = -1;
 State localStates[MAX_SLAVES_NUMBER];
-State& state = localStates[0];
 
 
 void reportToMaster(const char* message, ...) {
@@ -20,13 +19,18 @@ void reportToMaster(const char* message, ...) {
 	va_end(argp);
 
 	char buffer[REPORT_MESSAGE_SIZE];
-	sprintf(buffer, "[%d@%d]: ", myId, state.timestamp);
+	sprintf(buffer, "[%d@%d]: ", myId, localStates[myId].timestamp);
 
 	strcat(buffer, messageBuffer);
 
 	pvm_initsend(PvmDataDefault);
 	pvm_pkstr(buffer);
 	pvm_send(instance.masterTId, REPORT_TAG);
+}
+
+void reportStateToMaster(State otherState) {
+	reportToMaster("[%d], id: %d, ts: %d, canal: %d, REQts: %d",
+	localStates[myId].id == otherState.id, otherState.id, otherState.timestamp, otherState.canal, otherState.requestTimestamp);
 }
 
 void initializeLocalStates() {
@@ -43,8 +47,6 @@ void initializeLocalStates() {
 
 		if (instance.slaveTIds[i] == myTId) {
 			myId = i;
-			state = localStates[myId];
-			reportToMaster("My Id: %d, state.id: %d", myId , state.id);
 		}
 	}
 }
@@ -64,12 +66,12 @@ struct timeval timeDifference(struct timeval& start, struct timeval& stop) {
 }
 
 void inline incrementTimeStamp() {
-	++(state.timestamp);
+	++(localStates[myId].timestamp);
 }
 
 void inline updateTimeStamp(long timestamp) {
-	if (timestamp > state.timestamp) {
-		state.timestamp = timestamp + 1;
+	if (timestamp > localStates[myId].timestamp) {
+		localStates[myId].timestamp = timestamp + 1;
 	} else {
 		incrementTimeStamp();
 	}
@@ -82,14 +84,14 @@ int receiveMessage() {
 	updateTimeStamp(slaveState.timestamp);
 
 	localStates[slaveState.id] = slaveState;
-	reportToMaster("Received message from %d, its timestamp: %d", slaveState.id, localStates[slaveState.id].timestamp);
+	reportToMaster("Received state:");
 	return slaveState.id;
 }
 
 void prepareToSendState() {
 	incrementTimeStamp();
 	pvm_initsend(PvmDataDefault);
-	packState(state);
+	packState(localStates[myId]);
 }
 
 void sendStateMessage(int slaveId) {
@@ -126,7 +128,7 @@ void sleepAndResponse(unsigned int secondsToSleep) {
 
 void localSection() {
 	unsigned int period;
-	switch (state.position) {
+	switch (localStates[myId].position) {
 		case BASE:
 			period = rand() % MAX_BASE_TIME + 1;
 			reportToMaster("Replenishing stocks in the BASE for %d seconds", period);
@@ -139,7 +141,7 @@ void localSection() {
 	}
 	sleepAndResponse(period);
 
-	state.section = REQUEST;
+	localStates[myId].section = REQUEST;
 }
 
 void broadcastStateMessage() {
@@ -157,32 +159,31 @@ bool requestCondition() {
 
 		State& otherState = localStates[i];
 
-		reportToMaster("%d timestamp: %d", i, otherState.timestamp);
-		if (otherState.timestamp <= state.requestTimestamp) {
-			reportToMaster("Not gathered fresh states");
+		if (otherState.timestamp <= localStates[myId].requestTimestamp) {
 			return false;
 		}
-		if (otherState.canal == state.canal && otherState.requestTimestamp <= state.requestTimestamp && otherState.id < state.id) {
-			reportToMaster("Another request from %d with %d", i, otherState.requestTimestamp);
-			++sameCanalRequests;
+
+		if (otherState.canal == localStates[myId].canal) {
+			if (otherState.requestTimestamp < localStates[myId].requestTimestamp ||
+				otherState.requestTimestamp == localStates[myId].requestTimestamp && otherState.id < localStates[myId].id) {
+					++sameCanalRequests;
+				}
 		}
 	}
 
-	if (sameCanalRequests <= instance.canalSizes[state.canal]) {
-		reportToMaster("Canal has space");
+	if (sameCanalRequests <= instance.canalSizes[localStates[myId].canal]) {
 		return true;
 	} else {
-		reportToMaster("Canal has no space");
 		return false;
 	}
 }
 
 void requestSection() {
-	state.canal = rand() % instance.canalsNumber;
+	localStates[myId].canal = rand() % instance.canalsNumber;
 
 	broadcastStateMessage();
-	state.requestTimestamp = state.timestamp;
-	reportToMaster("Broadcasted request message on %d", state.requestTimestamp);
+	reportToMaster("Requested canal no %d", localStates[myId].canal);
+	localStates[myId].requestTimestamp = localStates[myId].timestamp;
 
 	int requestResponses = 0;
 	while (!requestCondition()) {
@@ -193,35 +194,38 @@ void requestSection() {
 		switch (tag) {
 			case REQUEST_TAG:
 				requestSlaveId = receiveRequestAndResponse();
-				reportToMaster("Received request from %d", requestSlaveId);
 				break;
 			case STATE_TAG:
 				receiveMessage();
 				++requestResponses;
-				reportToMaster("Received response to request no. %d", requestResponses);
 				break;
 		}
 	}
 
-	state.section = CRITICAL;
+	localStates[myId].section = CRITICAL;
 }
 
 void criticalSection() {
 	unsigned int period = rand() % MAX_CRUISE_TIME + 1;
-	switch (state.position) {
+	switch (localStates[myId].position) {
 		case BASE:
-			reportToMaster("Starting cruise from BASE to MISSION through canal %d for %d seconds", state.canal, period);
-			state.position = MISSION;
+			reportToMaster("Starting cruise from BASE to MISSION through canal %d for %d seconds", localStates[myId].canal, period);
+			localStates[myId].position = MISSION;
 			break;
 
 		case MISSION:
-			reportToMaster("Starting cruise from MISSION to BASE through canal %d for %d seconds", state.canal, period);
-			state.position = BASE;
+			reportToMaster("Starting cruise from MISSION to BASE through canal %d for %d seconds", localStates[myId].canal, period);
+			localStates[myId].position = BASE;
 			break;
 	}
 	sleepAndResponse(period);
 
-	state.section = LOCAL;
+	localStates[myId].section = LOCAL;
+	localStates[myId].canal = -1;
+
+	prepareToSendState();
+
+	pvm_bcast(SLAVE_GROUP, REQUEST_TAG);
 }
 
 main(int argc, char const *args[])
@@ -239,7 +243,7 @@ main(int argc, char const *args[])
 	reportToMaster("Group created");
 
 	while (true) {
-		switch (state.section) {
+		switch (localStates[myId].section) {
 			case REQUEST:
 				requestSection();
 				break;
