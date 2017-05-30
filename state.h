@@ -20,7 +20,8 @@ struct State {
     enum Section section;
     enum Position position;
     int canal;
-    unsigned long timestamp;
+    long timestamp;
+    long requestTimestamp;
 };
 typedef struct State State;
 

@@ -40,6 +40,7 @@ void initializeLocalStates() {
 		localState.position = BASE;
 		localState.canal = -1;
 		localState.timestamp = 0;
+		localState.requestTimestamp = -1;
 
 		if (instance.slaveTIds[i] == myTId) {
 			myId = i;
@@ -81,6 +82,7 @@ int receiveMessage() {
 	updateTimeStamp(slaveState.timestamp);
 
 	localStates[slaveState.id] = slaveState;
+	reportToMaster("Received message from %d, its timestamp: %d", slaveState.id, localStates[slaveState.id].timestamp);
 	return slaveState.id;
 }
 
@@ -96,10 +98,11 @@ void sendStateMessage(int slaveId) {
 	pvm_send(slaveId, STATE_TAG);
 }
 
-void receiveRequestAndResponse() {
+int receiveRequestAndResponse() {
 	int requestSlaveId = receiveMessage();
 	int tId = instance.slaveTIds[requestSlaveId];
 	sendStateMessage(tId);
+	return requestSlaveId;
 }
 
 void sleepAndResponse(unsigned int secondsToSleep) {
@@ -145,22 +148,52 @@ void broadcastStateMessage() {
 	pvm_bcast(SLAVE_GROUP, REQUEST_TAG);
 }
 
+bool requestCondition() {
+	int sameCanalRequests = 1;
+	for (int i = 0; i < instance.slavesNumber; i++) {
+		if (i == myId) {
+			continue;
+		}
+
+		State& otherState = localStates[i];
+
+		reportToMaster("%d timestamp: %d", i, otherState.timestamp);
+		if (otherState.timestamp <= state.requestTimestamp) {
+			reportToMaster("Not gathered fresh states");
+			return false;
+		}
+		if (otherState.canal == state.canal && otherState.requestTimestamp <= state.requestTimestamp) {
+			reportToMaster("Another request from %d with %d", i, otherState.requestTimestamp);
+			++sameCanalRequests;
+		}
+	}
+
+	if (sameCanalRequests <= instance.canalSizes[state.canal]) {
+		reportToMaster("Canal has space");
+		return true;
+	} else {
+		reportToMaster("Canal has no space");
+		return false;
+	}
+}
+
 void requestSection() {
 	state.canal = rand() % instance.canalsNumber;
 
-	long requestTimestamp = state.timestamp;
 	broadcastStateMessage();
-	reportToMaster("Broadcasted request message");
+	state.requestTimestamp = state.timestamp;
+	reportToMaster("Broadcasted request message on %d", state.requestTimestamp);
 
 	int requestResponses = 0;
-	while (requestResponses < instance.slavesNumber - 1) {
+	while (!requestCondition()) {
 		int bufferId = pvm_recv(-1, -1);
 		int tag;
 		pvm_bufinfo(bufferId, NULL, &tag, NULL);
+		int requestSlaveId;
 		switch (tag) {
 			case REQUEST_TAG:
-				receiveRequestAndResponse();
-				reportToMaster("Received request");
+				requestSlaveId = receiveRequestAndResponse();
+				reportToMaster("Received request from %d", requestSlaveId);
 				break;
 			case STATE_TAG:
 				receiveMessage();
@@ -219,6 +252,5 @@ main(int argc, char const *args[])
 				localSection();
 				break;
 		}
-		++state.timestamp;
 	}
 }
